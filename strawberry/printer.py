@@ -1,5 +1,6 @@
 from typing import Dict, List, Union
 
+import dataclasses
 from graphql.language import print_ast
 from graphql.language.block_string import print_block_string
 from graphql.type import (
@@ -88,21 +89,48 @@ def print_block(items: List[str]) -> str:
     return " {\n" + "\n".join(items) + "\n}" if items else ""
 
 
-def print_fields(type_: Union[GraphQLObjectType, GraphQLInterfaceType]) -> str:
+def print_federation_field_directive(strawberry_field):
+    out = ""
+
+    if "federation" in strawberry_field.metadata:
+        federation = strawberry_field.metadata["federation"]
+
+        provides = federation.get("provides", "")
+        requires = federation.get("requires", "")
+        external = federation.get("external", False)
+
+        if provides:
+            out += f' @provides(fields: "{provides}")'
+
+        if requires:
+            out += f' @requires(fields: "{requires}")'
+
+        if external:
+            out += f" @external"
+
+    return out
+
+
+def print_fields(strawberry_type) -> str:
+    # TODO: support for custom names
+    strawberry_fields = {
+        field.name: field for field in dataclasses.fields(strawberry_type)
+    }
+
     fields = [
         print_description(field, "  ", not i)
         + f"  {name}"
         + print_args(field.args, "  ")
         + f": {field.type}"
+        + print_federation_field_directive(strawberry_fields[name])
         + print_deprecated(field)
-        for i, (name, field) in enumerate(type_.fields.items())
+        for i, (name, field) in enumerate(strawberry_type.field.fields.items())
     ]
     return print_block(fields)
 
 
-def print_federation_key_directive(keys=None):
-    if not keys:
-        return ""
+def print_federation_key_directive(strawberry_type):
+    keys = getattr(strawberry_type, "_federation_keys", [])
 
     parts = []
 
@@ -112,22 +140,22 @@ def print_federation_key_directive(keys=None):
     return " " + " ".join(parts)
 
 
-def print_object(type_: GraphQLObjectType, keys=None) -> str:
+def print_object(strawberry_type) -> str:
+    type_ = strawberry_type.field
+
     return (
         print_description(type_)
         + f"type {type_.name}"
-        + print_federation_key_directive(keys)
+        + print_federation_key_directive(strawberry_type)
         + print_implemented_interfaces(type_)
-        + print_fields(type_)
+        + print_fields(strawberry_type)
     )
 
 
-def print_type(type_) -> str:
+def print_type(strawberry_type) -> str:
     """Returns a string representation of a strawberry type"""
 
-    graphql_type = type_.field
+    if is_object_type(strawberry_type.field):
+        return print_object(strawberry_type)
 
-    if is_object_type(graphql_type):
-        return print_object(graphql_type, keys=getattr(type_, "_federation_keys"))
-
-    return original_print_type(type_.field)
+    return original_print_type(strawberry_type.field)
