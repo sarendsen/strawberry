@@ -5,11 +5,11 @@ from .type import _process_type
 def type(cls=None, *args, **kwargs):
     def wrap(cls):
         keys = kwargs.pop("keys", [])
-        extends = kwargs.pop("extends", False)
+        extend = kwargs.pop("extend", False)
 
         wrapped = _process_type(cls, *args, **kwargs)
         wrapped._federation_keys = keys
-        wrapped._federation_extends = extends
+        wrapped._federation_extend = extend
 
         return wrapped
 

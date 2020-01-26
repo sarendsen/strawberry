@@ -1,4 +1,5 @@
-from typing import Dict, List, Union
+from itertools import chain
+from typing import Callable, Dict, List, Union
 
 import dataclasses
 from graphql.language import print_ast
@@ -12,11 +13,18 @@ from graphql.type import (
     GraphQLInterfaceType,
     GraphQLNamedType,
     GraphQLObjectType,
+    GraphQLSchema,
     GraphQLString,
     is_object_type,
+    is_specified_directive,
 )
 from graphql.utilities.ast_from_value import ast_from_value
-from graphql.utilities.schema_printer import print_type as original_print_type
+from graphql.utilities.schema_printer import (
+    is_defined_type,
+    print_directive,
+    print_schema_definition,
+    print_type as original_print_type,
+)
 
 
 def print_description(
@@ -89,11 +97,11 @@ def print_block(items: List[str]) -> str:
     return " {\n" + "\n".join(items) + "\n}" if items else ""
 
 
-def print_federation_field_directive(strawberry_field):
+def print_federation_field_directive(field, metadata):
     out = ""
 
-    if "federation" in strawberry_field.metadata:
-        federation = strawberry_field.metadata["federation"]
+    if metadata and "federation" in metadata:
+        federation = metadata["federation"]
 
         provides = federation.get("provides", "")
         requires = federation.get("requires", "")
@@ -112,17 +120,24 @@ def print_federation_field_directive(strawberry_field):
 
 
 def print_fields(strawberry_type) -> str:
-    # TODO: support for custom names
-    strawberry_fields = {
-        field.name: field for field in dataclasses.fields(strawberry_type)
-    }
+    strawberry_fields = dataclasses.fields(strawberry_type)
+
+    def _get_metadata(field_name):
+        return next(
+            (
+                f.metadata
+                for f in strawberry_fields
+                if (getattr(f, "field_name", None) or f.name) == field_name
+            ),
+            None,
+        )
 
     fields = [
         print_description(field, "  ", not i)
         + f"  {name}"
         + print_args(field.args, "  ")
         + f": {field.type}"
-        + print_federation_field_directive(strawberry_fields[name])
+        + print_federation_field_directive(field, _get_metadata(name))
         + print_deprecated(field)
         for i, (name, field) in enumerate(strawberry_type.field.fields.items())
     ]
@@ -144,7 +159,7 @@ def print_federation_key_directive(strawberry_type):
 
 
 def print_extends(strawberry_type):
-    if getattr(strawberry_type, "_federation_extends", False):
+    if getattr(strawberry_type, "_federation_extend", False):
         return "extend "
 
     return ""
@@ -170,3 +185,27 @@ def print_type(strawberry_type) -> str:
         return print_object(strawberry_type)
 
     return original_print_type(strawberry_type.field)
+
+
+def print_filtered_schema(
+    schema: GraphQLSchema,
+    directive_filter: Callable[[GraphQLDirective], bool],
+    type_filter: Callable[[GraphQLNamedType], bool],
+) -> str:
+    directives = filter(directive_filter, schema.directives)
+    type_map = schema.type_map
+    types = filter(type_filter, map(type_map.get, sorted(type_map)))  # type: ignore
+
+    return "\n\n".join(
+        chain(
+            filter(None, [print_schema_definition(schema)]),
+            (print_directive(directive) for directive in directives),
+            (print_type(type_._strawberry_type) for type_ in types),  # type: ignore
+        )
+    )
+
+
+def print_schema(schema: GraphQLSchema) -> str:
+    return print_filtered_schema(
+        schema, lambda n: not is_specified_directive(n), is_defined_type
+    )

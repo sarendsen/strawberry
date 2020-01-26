@@ -65,6 +65,8 @@ def _process_type(cls, *, is_input=False, is_interface=False, description=None):
                 permission_classes=permission_classes,
             ).field
 
+            fields[field_name]._strawberry_type = class_field
+
         strawberry_fields = {}
 
         for base in [cls, *cls.__bases__]:
@@ -111,6 +113,8 @@ def _process_type(cls, *, is_input=False, is_interface=False, description=None):
         ]
 
     wrapped.field = TypeClass(name, lambda: _get_fields(wrapped), **extra_kwargs)
+    # :D
+    wrapped.field._strawberry_type = cls
 
     return wrapped
 

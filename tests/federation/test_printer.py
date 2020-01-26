@@ -2,11 +2,11 @@ import textwrap
 import typing
 
 import strawberry
-from strawberry.printer import print_type
+from strawberry.printer import print_schema, print_type
 
 
-def test_print_extends():
-    @strawberry.federation.type(extends=True)
+def test_print_extend():
+    @strawberry.federation.type(extend=True)
     class Product:
         upc: str
         name: typing.Optional[str]
@@ -114,3 +114,35 @@ def test_print_requires():
     """
 
     assert print_type(Product) == textwrap.dedent(expected_representation).strip()
+
+
+def test_print_schema():
+    @strawberry.federation.type(keys=["upc"])
+    class Product:
+        upc: str
+        name: typing.Optional[str]
+        price: typing.Optional[int]
+        weight: typing.Optional[int]
+
+    @strawberry.federation.type(extend=True)
+    class Query:
+        @strawberry.field
+        def top_products(self, info, first: int) -> typing.List[Product]:
+            return []
+
+    expected_representation = """
+        type Product @key(fields: "upc") {
+          upc: String!
+          name: String
+          price: Int
+          weight: Int
+        }
+
+        extend type Query {
+          topProducts(first: Int!): [Product!]!
+        }
+    """
+
+    schema = strawberry.Schema(query=Query)
+
+    assert print_schema(schema) == textwrap.dedent(expected_representation).strip()

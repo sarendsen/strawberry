@@ -101,7 +101,7 @@ class LazyFieldWrapper:
 
     @lazy_property
     def field(self):
-        return _get_field(
+        field = _get_field(
             self._wrapped_obj,
             is_input=self.is_input,
             is_subscription=self.is_subscription,
@@ -109,6 +109,8 @@ class LazyFieldWrapper:
             description=self.field_description,
             check_permission=self._check_permissions,
         )
+
+        return field
 
 
 class strawberry_field(dataclasses.Field):
