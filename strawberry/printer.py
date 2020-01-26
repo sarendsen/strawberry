@@ -137,7 +137,17 @@ def print_federation_key_directive(strawberry_type):
     for key in keys:
         parts.append(f'@key(fields: "{key}")')
 
+    if not parts:
+        return ""
+
     return " " + " ".join(parts)
+
+
+def print_extends(strawberry_type):
+    if getattr(strawberry_type, "_federation_extends", False):
+        return "extend "
+
+    return ""
 
 
 def print_object(strawberry_type) -> str:
@@ -145,6 +155,7 @@ def print_object(strawberry_type) -> str:
 
     return (
         print_description(type_)
+        + print_extends(strawberry_type)
         + f"type {type_.name}"
         + print_federation_key_directive(strawberry_type)
         + print_implemented_interfaces(type_)
