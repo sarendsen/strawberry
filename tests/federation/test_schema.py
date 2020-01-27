@@ -72,3 +72,31 @@ def test_entities_type():
     assert result.data == {
         "__type": {"kind": "UNION", "possibleTypes": [{"name": "Product"}]}
     }
+
+
+def test_additional_scalars():
+    @strawberry.federation.type(keys=["upc"])
+    class Example:
+        upc: str
+
+    @strawberry.federation.type(extend=True)
+    class Query:
+        @strawberry.field
+        def top_products(self, info, first: int) -> typing.List[Example]:
+            return []
+
+    schema = strawberry.federation.Schema(query=Query)
+
+    query = """
+        query {
+            __type(name: "_Any") {
+                kind
+            }
+        }
+    """
+
+    result = graphql_sync(schema, query)
+
+    assert not result.errors
+
+    assert result.data == {"__type": {"kind": "SCALAR"}}

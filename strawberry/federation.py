@@ -1,10 +1,12 @@
-from graphql import GraphQLUnionType
+from graphql import GraphQLScalarType, GraphQLUnionType
 
 from .field import strawberry_field
 from .schema import Schema as BaseSchema
 from .type import _process_type
 
 
+# TODO: this should get reset or we need to find the
+# types when instantiating the schema
 TYPES_WITH_KEY = []
 
 
@@ -57,7 +59,9 @@ def field(wrap=None, *args, **kwargs):
 
 class Schema(BaseSchema):
     def get_additional_types(self):
-        if TYPES_WITH_KEY:
-            return [GraphQLUnionType("_Entity", [t.field for t in TYPES_WITH_KEY])]
+        types = [GraphQLScalarType("_Any")]
 
-        return []
+        if TYPES_WITH_KEY:
+            types += [GraphQLUnionType("_Entity", [t.field for t in TYPES_WITH_KEY])]
+
+        return types
