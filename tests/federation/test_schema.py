@@ -1,0 +1,74 @@
+import typing
+
+import strawberry
+from graphql import graphql_sync
+
+
+def test_entities_type_when_no_type_has_keys():
+    @strawberry.federation.type()
+    class Product:
+        upc: str
+        name: typing.Optional[str]
+        price: typing.Optional[int]
+        weight: typing.Optional[int]
+
+    @strawberry.federation.type(extend=True)
+    class Query:
+        @strawberry.field
+        def top_products(self, info, first: int) -> typing.List[Product]:
+            return []
+
+    schema = strawberry.federation.Schema(query=Query)
+
+    query = """
+        query {
+            __type(name: "_Entity") {
+                kind
+                possibleTypes {
+                    name
+                }
+            }
+        }
+    """
+
+    result = graphql_sync(schema, query)
+
+    assert not result.errors
+
+    assert result.data == {"__type": None}
+
+
+def test_entities_type():
+    @strawberry.federation.type(keys=["upc"])
+    class Product:
+        upc: str
+        name: typing.Optional[str]
+        price: typing.Optional[int]
+        weight: typing.Optional[int]
+
+    @strawberry.federation.type(extend=True)
+    class Query:
+        @strawberry.field
+        def top_products(self, info, first: int) -> typing.List[Product]:
+            return []
+
+    schema = strawberry.federation.Schema(query=Query)
+
+    query = """
+        query {
+            __type(name: "_Entity") {
+                kind
+                possibleTypes {
+                    name
+                }
+            }
+        }
+    """
+
+    result = graphql_sync(schema, query)
+
+    assert not result.errors
+
+    assert result.data == {
+        "__type": {"kind": "UNION", "possibleTypes": [{"name": "Product"}]}
+    }

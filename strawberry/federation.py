@@ -1,5 +1,11 @@
+from graphql import GraphQLUnionType
+
 from .field import strawberry_field
+from .schema import Schema as BaseSchema
 from .type import _process_type
+
+
+TYPES_WITH_KEY = []
 
 
 def type(cls=None, *args, **kwargs):
@@ -10,6 +16,9 @@ def type(cls=None, *args, **kwargs):
         wrapped = _process_type(cls, *args, **kwargs)
         wrapped._federation_keys = keys
         wrapped._federation_extend = extend
+
+        if keys:
+            TYPES_WITH_KEY.append(wrapped)
 
         return wrapped
 
@@ -44,3 +53,11 @@ def field(wrap=None, *args, **kwargs):
         return field
 
     return field(wrap)
+
+
+class Schema(BaseSchema):
+    def get_additional_types(self):
+        if TYPES_WITH_KEY:
+            return [GraphQLUnionType("_Entity", [t.field for t in TYPES_WITH_KEY])]
+
+        return []

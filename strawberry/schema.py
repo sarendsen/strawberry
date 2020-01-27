@@ -28,8 +28,13 @@ class Schema(GraphQLSchema):
             subscription=subscription.field if subscription else None,
             directives=specified_directives
             + [directive.directive for directive in directives],
-            types=[type.field for type in types],
+            types=[type.field for type in types] + self.get_additional_types(),
         )
+
+    def get_additional_types(self):
+        """Return a list of GraphQL types that will be added
+        to the initial types of this schema"""
+        return []
 
     def __repr__(self):
         return print_schema(self)
