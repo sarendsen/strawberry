@@ -200,7 +200,11 @@ def print_filtered_schema(
         chain(
             filter(None, [print_schema_definition(schema)]),
             (print_directive(directive) for directive in directives),
-            (print_type(type_._strawberry_type) for type_ in types),  # type: ignore
+            (
+                print_type(type_._strawberry_type)
+                for type_ in types
+                if hasattr(type_, "_strawberry_type")
+            ),  # type: ignore
         )
     )
 

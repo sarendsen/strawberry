@@ -1,3 +1,4 @@
+import textwrap
 import typing
 
 import strawberry
@@ -100,3 +101,46 @@ def test_additional_scalars():
     assert not result.errors
 
     assert result.data == {"__type": {"kind": "SCALAR"}}
+
+
+def test_service():
+    @strawberry.federation.type
+    class Product:
+        upc: str
+
+    @strawberry.federation.type(extend=True)
+    class Query:
+        @strawberry.field
+        def top_products(self, info, first: int) -> typing.List[Product]:
+            return []
+
+    schema = strawberry.federation.Schema(query=Query)
+
+    query = """
+        query {
+            _service {
+                sdl
+            }
+        }
+    """
+
+    result = graphql_sync(schema, query)
+
+    assert not result.errors
+
+    sdl = """
+        type Product {
+          upc: String!
+        }
+
+        type Query {
+          _service: _Service!
+          topProducts(first: Int!): [Product!]!
+        }
+
+        type _Service {
+          sdl: String!
+        }
+    """
+
+    assert result.data == {"_service": {"sdl": textwrap.dedent(sdl).strip()}}

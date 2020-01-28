@@ -1,13 +1,9 @@
 from graphql import GraphQLScalarType, GraphQLUnionType
 
 from .field import strawberry_field
+from .printer import print_schema
 from .schema import Schema as BaseSchema
 from .type import _process_type
-
-
-# TODO: this should get reset or we need to find the
-# types when instantiating the schema
-TYPES_WITH_KEY = []
 
 
 def type(cls=None, *args, **kwargs):
@@ -18,9 +14,6 @@ def type(cls=None, *args, **kwargs):
         wrapped = _process_type(cls, *args, **kwargs)
         wrapped._federation_keys = keys
         wrapped._federation_extend = extend
-
-        if keys:
-            TYPES_WITH_KEY.append(wrapped)
 
         return wrapped
 
@@ -58,10 +51,35 @@ def field(wrap=None, *args, **kwargs):
 
 
 class Schema(BaseSchema):
+    def __init__(self, query, *args, **kwargs):
+        @type(name="_Service")
+        class Service:
+            sdl: str
+
+        @type
+        class Query(query):
+            @field(name="_service")
+            def service(self, info) -> Service:
+                return Service(sdl=print_schema(info.schema))
+
+        super().__init__(Query, *args, **kwargs)
+
+        for type_ in self.get_additional_types():
+            self.type_map[type_.name] = type_
+
     def get_additional_types(self):
         types = [GraphQLScalarType("_Any")]
 
-        if TYPES_WITH_KEY:
-            types += [GraphQLUnionType("_Entity", [t.field for t in TYPES_WITH_KEY])]
+        federation_key_types = []
+
+        for graphql_type in self.type_map.values():
+            if hasattr(graphql_type, "_strawberry_type"):
+                if graphql_type._strawberry_type and getattr(
+                    graphql_type._strawberry_type, "_federation_keys", []
+                ):
+                    federation_key_types.append(graphql_type)
+
+        if federation_key_types:
+            types += [GraphQLUnionType("_Entity", federation_key_types)]
 
         return types
