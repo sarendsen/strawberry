@@ -1,4 +1,10 @@
-from graphql import GraphQLScalarType, GraphQLUnionType
+from graphql import (
+    GraphQLField,
+    GraphQLNonNull,
+    GraphQLObjectType,
+    GraphQLScalarType,
+    GraphQLUnionType,
+)
 
 from .field import strawberry_field
 from .printer import print_schema
@@ -51,24 +57,41 @@ def field(wrap=None, *args, **kwargs):
 
 
 class Schema(BaseSchema):
-    def __init__(self, query, *args, **kwargs):
-        @type(name="_Service")
-        class Service:
-            sdl: str
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        @type
-        class Query(query):
-            @field(name="_service")
-            def service(self, info) -> Service:
-                return Service(sdl=print_schema(info.schema))
-
-        super().__init__(Query, *args, **kwargs)
+        self._extend_query_type()
 
         for type_ in self.get_additional_types():
             self.type_map[type_.name] = type_
 
+    def _extend_query_type(self):
+        @type(name="_Service")
+        class Service:
+            sdl: str
+
+        fields = {
+            "_service": GraphQLField(
+                GraphQLNonNull(Service.field),
+                resolve=lambda _, info: Service(sdl=print_schema(info.schema)),
+            )
+        }
+
+        self.type_map["_Any"] = GraphQLScalarType("_Any")
+        self.type_map["_Service"] = Service.field
+
+        fields.update(self.query_type.fields)
+
+        self.query_type = GraphQLObjectType(
+            name=self.query_type.name,
+            description=self.query_type.description,
+            fields=fields,
+        )
+
+        self.type_map[self.query_type.name] = self.query_type
+
     def get_additional_types(self):
-        types = [GraphQLScalarType("_Any")]
+        types = []
 
         federation_key_types = []
 

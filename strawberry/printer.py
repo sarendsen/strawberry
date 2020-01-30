@@ -119,8 +119,9 @@ def print_federation_field_directive(field, metadata):
     return out
 
 
-def print_fields(strawberry_type) -> str:
-    strawberry_fields = dataclasses.fields(strawberry_type)
+def print_fields(type_) -> str:
+    strawberry_type = getattr(type_, "_strawberry_type", None)
+    strawberry_fields = dataclasses.fields(strawberry_type) if strawberry_type else []
 
     def _get_metadata(field_name):
         return next(
@@ -139,12 +140,17 @@ def print_fields(strawberry_type) -> str:
         + f": {field.type}"
         + print_federation_field_directive(field, _get_metadata(name))
         + print_deprecated(field)
-        for i, (name, field) in enumerate(strawberry_type.field.fields.items())
+        for i, (name, field) in enumerate(type_.fields.items())
     ]
     return print_block(fields)
 
 
-def print_federation_key_directive(strawberry_type):
+def print_federation_key_directive(type_):
+    strawberry_type = getattr(type_, "_strawberry_type", None)
+
+    if not strawberry_type:
+        return ""
+
     keys = getattr(strawberry_type, "_federation_keys", [])
 
     parts = []
@@ -158,33 +164,36 @@ def print_federation_key_directive(strawberry_type):
     return " " + " ".join(parts)
 
 
-def print_extends(strawberry_type):
-    if getattr(strawberry_type, "_federation_extend", False):
+def print_extends(type_):
+    strawberry_type = getattr(type_, "_strawberry_type", None)
+
+    if strawberry_type and getattr(strawberry_type, "_federation_extend", False):
         return "extend "
 
     return ""
 
 
-def print_object(strawberry_type) -> str:
-    type_ = strawberry_type.field
-
+def print_object(type_) -> str:
     return (
         print_description(type_)
-        + print_extends(strawberry_type)
+        + print_extends(type_)
         + f"type {type_.name}"
-        + print_federation_key_directive(strawberry_type)
+        + print_federation_key_directive(type_)
         + print_implemented_interfaces(type_)
-        + print_fields(strawberry_type)
+        + print_fields(type_)
     )
 
 
-def print_type(strawberry_type) -> str:
+def print_type(field) -> str:
     """Returns a string representation of a strawberry type"""
 
-    if is_object_type(strawberry_type.field):
-        return print_object(strawberry_type)
+    if hasattr(field, "field"):
+        field = field.field
 
-    return original_print_type(strawberry_type.field)
+    if is_object_type(field):
+        return print_object(field)
+
+    return original_print_type(field)
 
 
 def print_filtered_schema(
@@ -194,17 +203,14 @@ def print_filtered_schema(
 ) -> str:
     directives = filter(directive_filter, schema.directives)
     type_map = schema.type_map
+
     types = filter(type_filter, map(type_map.get, sorted(type_map)))  # type: ignore
 
     return "\n\n".join(
         chain(
             filter(None, [print_schema_definition(schema)]),
             (print_directive(directive) for directive in directives),
-            (
-                print_type(type_._strawberry_type)
-                for type_ in types
-                if hasattr(type_, "_strawberry_type")
-            ),  # type: ignore
+            (print_type(type_) for type_ in types),  # type: ignore
         )
     )
 

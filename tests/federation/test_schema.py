@@ -138,6 +138,8 @@ def test_service():
           topProducts(first: Int!): [Product!]!
         }
 
+        scalar _Any
+
         type _Service {
           sdl: String!
         }
