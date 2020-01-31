@@ -1,5 +1,6 @@
 from graphql import (
     GraphQLField,
+    GraphQLList,
     GraphQLNonNull,
     GraphQLObjectType,
     GraphQLScalarType,
@@ -56,19 +57,31 @@ def field(wrap=None, *args, **kwargs):
     return field(wrap)
 
 
+def entities_resolver(root, info, representations):
+    results = []
+
+    for representation in representations:
+        type_name = representation.pop("__typename")
+        graphql_type = info.schema.get_type(type_name)
+
+        result = graphql_type._strawberry_type.resolve_reference(**representation)
+        results.append(result)
+
+    return results
+
+
 class Schema(BaseSchema):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._extend_query_type()
 
-        for type_ in self.get_additional_types():
-            self.type_map[type_.name] = type_
-
     def _extend_query_type(self):
         @type(name="_Service")
         class Service:
             sdl: str
+
+        Any = GraphQLScalarType("_Any")
 
         fields = {
             "_service": GraphQLField(
@@ -77,8 +90,18 @@ class Schema(BaseSchema):
             )
         }
 
-        self.type_map["_Any"] = GraphQLScalarType("_Any")
-        self.type_map["_Service"] = Service.field
+        entities_type = self._get_entity_type()
+
+        if entities_type:
+            self.type_map[entities_type.name] = entities_type
+
+            fields["_entities"] = GraphQLField(
+                GraphQLNonNull(GraphQLList(entities_type)),
+                args={
+                    "representations": GraphQLNonNull(GraphQLList(GraphQLNonNull(Any)))
+                },
+                resolve=entities_resolver,
+            )
 
         fields.update(self.query_type.fields)
 
@@ -88,11 +111,11 @@ class Schema(BaseSchema):
             fields=fields,
         )
 
+        self.type_map["_Any"] = Any
+        self.type_map["_Service"] = Service.field
         self.type_map[self.query_type.name] = self.query_type
 
-    def get_additional_types(self):
-        types = []
-
+    def _get_entity_type(self):
         federation_key_types = []
 
         for graphql_type in self.type_map.values():
@@ -103,6 +126,11 @@ class Schema(BaseSchema):
                     federation_key_types.append(graphql_type)
 
         if federation_key_types:
-            types += [GraphQLUnionType("_Entity", federation_key_types)]
+            entity_type = GraphQLUnionType("_Entity", federation_key_types)
 
-        return types
+            def _resolve_type(self, value, _type):
+                return self.field
+
+            entity_type.resolve_type = _resolve_type
+
+            return entity_type
